@@ -1,0 +1,658 @@
+#include <SoftwareSerial.h>
+#include <EEPROM.h>
+
+#define GSM_RX 3  // пин RX на модуле подключаем к указаному пину на Ардуино TX
+#define GSM_TX 2  // пин TX на модуле подключаем к указаному пину на Ардуино RX
+
+#define SECRET 77
+
+SoftwareSerial gsm(GSM_TX, GSM_RX); // установка контактовGSM_TX->RX и GSM_RX->TX для программного порта
+
+#define RELE_ONE 6 // Пин для подключения реле 1
+#define RELE_TWO 5  // Пин для подключения реле 2
+
+
+bool oneStart = true;                                             //  статус первого запуска устройства
+bool twoStart = true;                                             //  статус первого запуска устройства
+bool fullStart = false;                                             //  статус первого запуска устройства
+
+String phone1 = "";                                                //  тут будет номер мастер тел в виде строки
+String phone2 = "";                                                //  тут будет номер мастер тел в виде строки
+
+int phonePref, phoneCode, phoneOne, phoneTwo;
+String ch1, ch2, ch3, ch4;
+
+int EEPROM_int_read(int addr)
+{
+    byte raw[2];
+    for (byte i = 0; i < 2; i++) raw[i] = EEPROM.read(addr + i);
+    int &num = (int&)raw;
+    return num;
+}
+
+void EEPROM_int_write(int addr, int num)
+{
+    byte raw[2];
+    (int&)raw = num;
+    for (byte i = 0; i < 2; i++) EEPROM.write(addr + i, raw[i]);
+}
+
+void sms(String text, String phone)
+{
+    gsm.println("AT+CMGS=\"+" + phone + "\""); delay(500);
+    gsm.print(text); delay(500);
+    gsm.print((char)26); delay(2000);
+}
+
+void clearsms()
+{
+  gsm.println("AT+CMGD=1");
+}
+
+void setup()
+{
+    pinMode(RELE_ONE, OUTPUT); digitalWrite(RELE_ONE, LOW);
+    pinMode(RELE_TWO, OUTPUT); digitalWrite(RELE_TWO, LOW);
+
+    Serial.begin(9600); // Инициализация UART
+
+    gsm.begin(9600); // Инициализация GSM
+
+    delay(10000); // Ожидание регистрации в сети
+    
+    // настройка приема сообщений
+    gsm.println("AT+CMGF=1"); delay(500); // устанавливаем текстовый режимсмс-сообщения
+    gsm.println("AT+IFC=1, 1"); delay(500); // устанавливаем программныйконтроль потоком передачи данных
+    gsm.println("AT+CPBS=\"SM\""); delay(500); // открываем доступ кданным телефонной книги SIM-карты
+    gsm.println("AT+CNMI=1,2,2,1,0"); delay(500); // включает оповещение оновых сообщениях, новые сообщения приходят в следующем формате: +CMT:"<номер телефона>", "", "<дата, время>", ( +CMT:"+380xxxxxxxxx","","17/02/04,04:44:09+08" ) сразу за ним идет самосообщение с новой строки
+    gsm.println("AT+CSCS=\"GSM\""); delay(500); // устанавливаем кодировку
+
+    // Удаляем все сообщения
+    gsm.println("AT+CMGD=1,4"); delay(2500); 
+
+    //  Если не первый запуск
+    if (EEPROM.read(0) == SECRET)
+    {
+        //  Вытаскиваем номер из епром и кидаем в переменную номер тел...  и преобразовываем телефон в строку
+        phonePref = EEPROM_int_read(1);
+        phoneCode = EEPROM_int_read(3);
+        phoneOne = EEPROM_int_read(5);
+        phoneTwo = EEPROM_int_read(7);
+    
+        if (String(phonePref).length() == 1) ch1 = String(phonePref);
+    
+        if (String(phoneCode).length() == 1)
+        {
+            ch2 = "00" + String(phoneCode);
+        } 
+        else if (String(phoneCode).length() == 2)
+        {
+            ch2 = "0" + String(phoneCode);
+        } 
+        else 
+        {
+            ch2 = String(phoneCode);
+        }
+  
+        if (String(phoneOne).length() == 1)
+        {
+            ch3 = "00" + String(phoneOne);
+        } else if (String(phoneOne).length() == 2)
+        {
+            ch3 = "0" + String(phoneOne);
+        } 
+        else 
+        {
+            ch3 = String(phoneOne);
+        }
+    
+        if (String(phoneTwo).length() == 1)
+        {
+            ch4 = "000" + String(phoneTwo);
+        }
+        else if (String(phoneTwo).length() == 2)
+        {
+            ch4 = "00" + String(phoneTwo);
+        }
+        else if (String(phoneTwo).length() == 3)
+        {
+            ch4 = "0" + String(phoneTwo);
+        } 
+        else
+        {
+            ch4 = String(phoneTwo);
+        }
+    
+        phone1 = ch1 + ch2 + ch3 + ch4;
+    
+        //  Отправляем СМС что всё в норме на номер мастер тел
+        sms("OK", phone1);  // Отправляем СМС на номер +79517956505
+        Serial.print("Master phone 1: +");
+        Serial.println(phone1);
+        
+       
+
+        //  Вытаскиваем номер из епром и кидаем в переменную номер тел...  и преобразовываем телефон в строку
+        phonePref = EEPROM_int_read(11);
+        phoneCode = EEPROM_int_read(13);
+        phoneOne = EEPROM_int_read(15);
+        phoneTwo = EEPROM_int_read(17);
+    
+        if (String(phonePref).length() == 1) ch1 = String(phonePref);
+    
+        if (String(phoneCode).length() == 1)
+        {
+            ch2 = "00" + String(phoneCode);
+        } 
+        else if (String(phoneCode).length() == 2)
+        {
+            ch2 = "0" + String(phoneCode);
+        } 
+        else 
+        {
+            ch2 = String(phoneCode);
+        }
+  
+        if (String(phoneOne).length() == 1)
+        {
+            ch3 = "00" + String(phoneOne);
+        } else if (String(phoneOne).length() == 2)
+        {
+            ch3 = "0" + String(phoneOne);
+        } 
+        else 
+        {
+            ch3 = String(phoneOne);
+        }
+    
+        if (String(phoneTwo).length() == 1)
+        {
+            ch4 = "000" + String(phoneTwo);
+        }
+        else if (String(phoneTwo).length() == 2)
+        {
+            ch4 = "00" + String(phoneTwo);
+        }
+        else if (String(phoneTwo).length() == 3)
+        {
+            ch4 = "0" + String(phoneTwo);
+        } 
+        else
+        {
+            ch4 = String(phoneTwo);
+        }
+    
+        phone2 = ch1 + ch2 + ch3 + ch4;
+    
+        //  Отправляем СМС что всё в норме на номер мастер тел
+        sms("OK", phone2);  // Отправляем СМС на номер +79517956505
+        Serial.print("Master phone 2: +");
+        Serial.println(phone2);
+        
+       
+
+
+
+        //  Меняем статус программы на стандартный режим работы
+        twoStart = false;
+        twoStart = false;
+        fullStart = true;
+    }
+    else
+    {
+        Serial.println("Not master phones ");
+    }
+    
+    delay(5000);
+    serialFlush();
+
+    
+    
+    Serial.println("Settings complete!!!");
+    Serial.println("----------------------------------------------------------");
+}
+
+void(* resetFunc) (void) = 0; // объявляем функцию reset
+
+void serialFlush(){
+  while(gsm.available() > 0) {
+    char t = gsm.read();
+  }
+} 
+
+void loop() 
+{
+    // Цицл будет работать только пока первый запуск и отсутствует номер мастер телефона
+    while (oneStart)
+    {
+        // Если GSM модуль что-то послал
+        if (gsm.available())
+        {
+            delay(200);  // Ожидаем заполнения буфера
+            
+            uint8_t ch = 0;
+            String val = "";
+            
+            // Cохраняем входную строку в переменную val
+            while (gsm.available())
+            {
+                ch = gsm.read();
+                val += char(ch);
+                delay(10);
+            }
+      
+            // Eсли звонок обнаружен, то проверяем номер
+            if (val.indexOf("RING") > -1)
+            {
+                gsm.println("ATH"); // Разрываем связь
+               
+                //  Переводим в число номер телефона в виде 4-х частей
+                phonePref = (val.substring(18, 19)).toInt();
+                phoneCode = (val.substring(19, 22)).toInt();
+                phoneOne =  (val.substring(22, 25)).toInt();
+                phoneTwo =  (val.substring(25, 29)).toInt();
+        
+                EEPROM_int_write(1, phonePref);
+                EEPROM_int_write(3, phoneCode);
+                EEPROM_int_write(5, phoneOne);
+                EEPROM_int_write(7, phoneTwo);
+        
+                if (String(phonePref).length() == 1)
+                {
+                    ch1 = String(phonePref);
+                }
+                                
+                if (String(phoneCode).length() == 1) 
+                {
+                    ch2 = "00" + String(phoneCode);
+                }
+                else if (String(phoneCode).length() == 2)
+                {
+                    ch2 = "0" + String(phoneCode);
+                }
+                else 
+                {
+                    ch2 = String(phoneCode);
+                }
+                
+                if (String(phoneOne).length() == 1)
+                {
+                    ch3 = "00" + String(phoneOne);
+                }
+                else if (String(phoneOne).length() == 2)
+                {
+                    ch3 = "0" + String(phoneOne);
+                }
+                else 
+                {
+                    ch3 = String(phoneOne);
+                }
+                
+                if (String(phoneTwo).length() == 1)
+                {
+                    ch4 = "000" + String(phoneTwo);
+                } 
+                else if (String(phoneTwo).length() == 2)
+                {
+                    ch4 = "00" + String(phoneTwo);
+                }
+                else if (String(phoneTwo).length() == 3) 
+                {
+                    ch4 = "0" + String(phoneTwo);
+                } 
+                else
+                {
+                    ch4 = String(phoneTwo);
+                }
+                
+                phone1 = ch1 + ch2 + ch3 + ch4;
+        
+                Serial.print("SAVE MASTER 1 +");
+                Serial.println(phone1);
+        
+                //  Отправляем информацию о том что номер сохранен
+                sms("Number 1" + phone1 + " save", phone1);  // Отправляем СМС на номер
+                delay(10000);
+                val = "";  // Очищаем переменную команды
+                serialFlush();
+
+                break;
+            }
+      
+            val = "";  // Очищаем переменную команды
+            serialFlush();
+
+        }
+    }
+
+    delay(10000);
+    serialFlush();
+    
+    // Цицл будет работать только пока первый запуск и отсутствует номер мастер телефона
+    while (twoStart)
+    {
+        // Если GSM модуль что-то послал
+        if (gsm.available())
+        {
+            delay(200);  // Ожидаем заполнения буфера
+            
+            uint8_t ch = 0;
+            String val = "";
+            
+            // Cохраняем входную строку в переменную val
+            while (gsm.available())
+            {
+                ch = gsm.read();
+                val += char(ch);
+                delay(10);
+            }
+      
+            // Eсли звонок обнаружен, то проверяем номер
+            if (val.indexOf("RING") > -1)
+            {
+                gsm.println("ATH"); // Разрываем связь
+               
+                //  Переводим в число номер телефона в виде 4-х частей
+                phonePref = (val.substring(18, 19)).toInt();
+                phoneCode = (val.substring(19, 22)).toInt();
+                phoneOne =  (val.substring(22, 25)).toInt();
+                phoneTwo =  (val.substring(25, 29)).toInt();
+        
+                //  Записываем в ЕЕПРОМ
+                EEPROM.write(0, SECRET);
+        
+                EEPROM_int_write(11, phonePref);
+                EEPROM_int_write(13, phoneCode);
+                EEPROM_int_write(15, phoneOne);
+                EEPROM_int_write(17, phoneTwo);
+        
+                if (String(phonePref).length() == 1)
+                {
+                    ch1 = String(phonePref);
+                }
+                                
+                if (String(phoneCode).length() == 1) 
+                {
+                    ch2 = "00" + String(phoneCode);
+                }
+                else if (String(phoneCode).length() == 2)
+                {
+                    ch2 = "0" + String(phoneCode);
+                }
+                else 
+                {
+                    ch2 = String(phoneCode);
+                }
+                
+                if (String(phoneOne).length() == 1)
+                {
+                    ch3 = "00" + String(phoneOne);
+                }
+                else if (String(phoneOne).length() == 2)
+                {
+                    ch3 = "0" + String(phoneOne);
+                }
+                else 
+                {
+                    ch3 = String(phoneOne);
+                }
+                
+                if (String(phoneTwo).length() == 1)
+                {
+                    ch4 = "000" + String(phoneTwo);
+                } 
+                else if (String(phoneTwo).length() == 2)
+                {
+                    ch4 = "00" + String(phoneTwo);
+                }
+                else if (String(phoneTwo).length() == 3) 
+                {
+                    ch4 = "0" + String(phoneTwo);
+                } 
+                else
+                {
+                    ch4 = String(phoneTwo);
+                }
+                
+                phone2 = ch1 + ch2 + ch3 + ch4;
+        
+                Serial.print("SAVE MASTER 2 +");
+                Serial.println(phone2);
+        
+                //  Отправляем информацию о том что номер сохранен
+                sms("Number 2" + phone2 + " save", phone2);  // Отправляем СМС на номер
+                delay(10000);
+                val = "";  // Очищаем переменную команды
+                serialFlush();
+
+                break;
+            }
+      
+            val = "";  // Очищаем переменную команды
+            serialFlush();
+        }
+    }
+
+    delay(10000);
+    serialFlush();
+    
+    while(1)
+    {
+        // Цицл стандартный режим работы
+        if (gsm.available())
+        {
+            delay(200);  // Ожидаем заполнения буфера
+            
+            uint8_t ch = 0;
+            String val = "";
+    
+            while (gsm.available())
+            {
+                ch = gsm.read();
+                val += char(ch);
+                delay(10);
+            }
+           
+            //----------------------- ЕСЛИ ВЫЗОВ -----------------------//
+            if (val.indexOf("RING") > -1)
+            {
+                if (val.indexOf(phone1) > -1)
+                {
+                    gsm.println("ATH"); // Разрываем связь
+                    delay(10000);
+                    
+                    sms("CALL 1",phone1);
+                    Serial.println("CALL 1");
+                } 
+                else if (val.indexOf(phone2) > -1)
+                {
+                    gsm.println("ATH"); // Разрываем связь
+                    delay(10000);
+                    
+                    sms("CALL 2",phone2);
+                    Serial.println("CALL 2");
+                }
+                else
+                {
+                    gsm.println("ATH"); // Разрываем связь
+                    delay(10000);
+                    Serial.println("CALL");
+                }
+
+            }
+    
+            //----------------------- ЕСЛИ СМС -----------------------//
+            if (val.indexOf("+CMT") > -1)
+            {
+                //  ЕСЛИ SMS ОТ ХОЗЯИНА 1
+                if (val.indexOf(phone1) > -1)
+                
+                {
+                    if (val.indexOf("SMS") > -1)
+                    {
+                        Serial.println("SMS");
+                        
+                        sms("SMS", phone1);
+                    }
+                    
+                    if (val.indexOf("ON1") > -1)
+                    {
+                        Serial.println("ON1");
+                        digitalWrite(RELE_ONE, LOW);
+                        
+                        sms("ON1",phone1);
+                    }
+    
+                    if (val.indexOf("OFF1") > -1)
+                    {
+                        Serial.println("OFF1");
+                        digitalWrite(RELE_ONE,HIGH );
+                        
+                        sms("OFF1", phone1);
+                    }
+                    
+                    if (val.indexOf("ON2") > -1)
+                    {
+                        Serial.println("ON2");
+                        digitalWrite(RELE_TWO, LOW);
+                        
+                        sms("ON2", phone1);
+                    }
+    
+                    if (val.indexOf("OFF2") > -1)
+                    {
+                        Serial.println("OFF2");
+                        digitalWrite(RELE_TWO, HIGH);
+                        
+                        sms("OFF2", phone1);
+                    }
+                    
+                    if (val.indexOf("ALLON") > -1)
+                    {
+                        Serial.println("ALLON");
+                        digitalWrite(RELE_ONE, LOW);
+                        digitalWrite(RELE_TWO, LOW);
+                        
+                        sms("ALLON", phone1);
+                    }
+    
+                    if (val.indexOf("ALLOFF") > -1)
+                    {
+                        Serial.println("ALLOFF");
+                        digitalWrite(RELE_ONE, HIGH);
+                        digitalWrite(RELE_TWO, HIGH);
+                        
+                        sms("ALLOFF", phone1);
+                    }
+    
+                    if (val.indexOf("rp3") > -1)
+                    {
+                        Serial.println("rp3");
+          
+                        digitalWrite(RELE_ONE, HIGH);
+                        digitalWrite(RELE_TWO, HIGH);
+                        delay(10000);
+                        digitalWrite(RELE_ONE, LOW);
+                        digitalWrite(RELE_TWO, LOW);
+          
+                        sms("RP3", phone1);
+                    }    
+                }
+
+                //  ЕСЛИ SMS ОТ ХОЗЯИНА 2
+                if (val.indexOf(phone2) > -1)
+                
+                {
+                    if (val.indexOf("SMS") > -1)
+                    {
+                        Serial.println("SMS");
+                        
+                        sms("SMS", phone2);
+                    }
+                    
+                    if (val.indexOf("ON1") > -1)
+                    {
+                        Serial.println("ON1");
+                        digitalWrite(RELE_ONE, LOW);
+                        
+                        sms("ON1",phone2);
+                    }
+    
+                    if (val.indexOf("OFF1") > -1)
+                    {
+                        Serial.println("OFF1");
+                        digitalWrite(RELE_ONE,HIGH );
+                        
+                        sms("OFF1", phone2);
+                    }
+                    
+                    if (val.indexOf("ON2") > -1)
+                    {
+                        Serial.println("ON2");
+                        digitalWrite(RELE_TWO, LOW);
+                        
+                        sms("ON2", phone2);
+                    }
+    
+                    if (val.indexOf("OFF2") > -1)
+                    {
+                        Serial.println("OFF2");
+                        digitalWrite(RELE_TWO, HIGH);
+                        
+                        sms("OFF2", phone2);
+                    }
+                    
+                    if (val.indexOf("ALLON") > -1)
+                    {
+                        Serial.println("ALLON");
+                        digitalWrite(RELE_ONE, LOW);
+                        digitalWrite(RELE_TWO, LOW);
+                        
+                        sms("ALLON", phone2);
+                    }
+    
+                    if (val.indexOf("ALLOFF") > -1)
+                    {
+                        Serial.println("ALLOFF");
+                        digitalWrite(RELE_ONE, HIGH);
+                        digitalWrite(RELE_TWO, HIGH);
+                        
+                        sms("ALLOFF", phone2);
+                    }
+    
+                    if (val.indexOf("rp3") > -1)
+                    {
+                        Serial.println("rp3");
+          
+                        digitalWrite(RELE_ONE, HIGH);
+                        digitalWrite(RELE_TWO, HIGH);
+                        delay(10000);
+                        digitalWrite(RELE_ONE, LOW);
+                        digitalWrite(RELE_TWO, LOW);
+          
+                        sms("RP3", phone2);
+                    }    
+                }
+                
+                if (val.indexOf("PASSWORD") > -1)
+                {
+                    Serial.println("PASSWORD");
+                    Serial.println("resetting");
+                   
+                    sms("PASSWORD", phone1);
+                    sms("PASSWORD", phone2);
+                    
+                    EEPROM.write(0, SECRET + 1);
+                    resetFunc(); //вызываем reset
+                    return;
+                   
+                }
+                
+            }
+    
+            val = "";  // Очищаем переменную команды
+            serialFlush();
+
+        }
+    }
+}
